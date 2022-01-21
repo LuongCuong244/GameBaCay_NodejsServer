@@ -1,4 +1,5 @@
 const Room = require("../models/Room");
+const Statistical = require('../models/Statistical');
 const handleEndGame = require('../logic.game/HandleEndGame').handleEndGame;
 const PLAYER_KEYS = require('../../variables').PLAYER_KEYS;
 const timeManagement = require('./TimeManagement/RunningGame_Manager').timeManagement;
@@ -6,7 +7,7 @@ const timeManagement = require('./TimeManagement/RunningGame_Manager').timeManag
 const countdownOfRunningGame = async (roomSocket, roomName) => {
     let countDown = timeManagement.get(roomName).countDown;
     if (countDown) {
-        timeManagement.set(roomName,{
+        timeManagement.set(roomName, {
             time: 20,
             countDown: null,
         })
@@ -37,7 +38,7 @@ const countdownOfRunningGame = async (roomSocket, roomName) => {
                 })
                 .catch(err => console.log(err));
         } else {
-            timeManagement.set(roomName,{
+            timeManagement.set(roomName, {
                 time: time - 1,
                 countDown: timeManagement.get(roomName).countDown
             })
@@ -51,7 +52,7 @@ let isShowResult = false;
 const showResult = async (roomSocket, roomName) => {
     let countDown = timeManagement.get(roomName).countDown;
     if (countDown) {
-        timeManagement.set(roomName,{
+        timeManagement.set(roomName, {
             time: 20,
             countDown: null,
         })
@@ -73,24 +74,50 @@ const showResult = async (roomSocket, roomName) => {
                 return;
             }
             let room = rooms[0];
+
+            let totalWin = 0;
+            let totalLost = 0;
+            let cardOwner_1 = room.ownerOfRoom.cardFirst;
+            let cardOwner_2 = room.ownerOfRoom.cardSecond;
+            let cardOwner_3 = room.ownerOfRoom.cardThird;
+            let scoreOwner_1 = parseInt(cardOwner_1.charAt(cardOwner_1.length - 1));
+            let scoreOwner_2 = parseInt(cardOwner_2.charAt(cardOwner_2.length - 1));
+            let scoreOwner_3 = parseInt(cardOwner_3.charAt(cardOwner_3.length - 1));
+            let scoreOwner = (scoreOwner_1 + scoreOwner_2 + scoreOwner_3) % 10;
+            if (scoreOwner === 0) {
+                scoreOwner = 10;
+            }
             let response = {};
             for (let key of PLAYER_KEYS) {
                 if (room[key] && key != 'ownerOfRoom' && room[key].isWaiting === false) {
-                    room[key].status = compareScore(room[key], room.ownerOfRoom);
+                    let res = compareScore(room[key], room.ownerOfRoom);
+                    if (res[0] === 'Win') {
+                        totalLost++;
+                    } else {
+                        totalWin++;
+                    }
+                    room[key].status = res[0];
+                    handleStatistical(room[key].userName, room[key].status, res[1]);
                     await Room.findOneAndUpdate({ roomName: roomName }, {
                         [key]: room[key]
                     })
                     response[key] = room[key];
                 }
             }
+            handleStatistical(
+                room.ownerOfRoom.userName,
+                totalWin - totalLost > 0 ? 'Win' : 'Lost', // nếu thắng nhiều người chơi hơn thua thì chủ phòng thắng
+                scoreOwner,
+                totalWin - totalLost, // nếu === 0 thì là hòa
+            )
             roomSocket.in(roomName).emit('hide_countdown');
             roomSocket.in(roomName).emit('game_room_update', {
                 ...response,
                 'ownerOfRoom': room.ownerOfRoom
             });
-            setTimeout(() =>{
+            setTimeout(() => {
                 handleEndGame(roomSocket, roomName);
-            },3000)
+            }, 3000)
         })
         .catch(err => console.log(err))
 }
@@ -111,8 +138,10 @@ const compareScore = (guest, owner) => {
     let scoreOwner_2 = parseInt(cardOwner_2.charAt(cardOwner_2.length - 1));
     let scoreOwner_3 = parseInt(cardOwner_3.charAt(cardOwner_3.length - 1));
 
+
     let scoreGuest = (scoreGuest_1 + scoreGuest_2 + scoreGuest_3) % 10;
     let scoreOwner = (scoreOwner_1 + scoreOwner_2 + scoreOwner_3) % 10;
+
     if (scoreGuest === 0) {
         scoreGuest = 10;
     }
@@ -121,10 +150,10 @@ const compareScore = (guest, owner) => {
     }
 
     if (scoreGuest > scoreOwner) {
-        return 'Win';
+        return ['Win', scoreGuest];
     }
     if (scoreGuest < scoreOwner) {
-        return 'Lost';
+        return ['Lost', scoreGuest];
     }
 
     // Thuật toán:
@@ -164,10 +193,36 @@ const compareScore = (guest, owner) => {
         }
     }
     if (Math.max(maxGuest_1, maxGuest_2, maxGuest_3) > Math.max(maxOwner_1, maxOwner_2, maxOwner_3)) {
-        return 'Win';
+        return ['Win', scoreGuest];
     } else {
-        return 'Lost';
+        return ['Lost', scoreGuest];
     }
+}
+
+const handleStatistical = async (userName, status, score, differenceOfTwoNumbers) => {
+
+    Statistical.find({ userName: userName })
+        .then(async (resQuery) => {
+            if (resQuery.length !== 1) {
+                console.log("Thống kê không là duy nhất!");
+                return;
+            }
+            let update = {
+                numberOfGamesPlayed: resQuery[0].numberOfGamesPlayed + 1,
+                numberOfGamesWon: status === 'Win' ? resQuery[0].numberOfGamesWon + 1 : resQuery[0].numberOfGamesWon,
+                currentWinStreak: status === 'Win' ? resQuery[0].currentWinStreak + 1 : 0,
+                getTenScore: score === 10 ? resQuery[0].getTenScore + 1 : resQuery[0].getTenScore,
+                getOneScore: score === 1 ? resQuery[0].getOneScore + 1 : resQuery[0].getOneScore,
+            }
+            if (update.currentWinStreak > resQuery[0].longestWinStreak) {
+                update.longestWinStreak = update.currentWinStreak;
+            }
+            if (differenceOfTwoNumbers === 0) {
+                update.numberOfGamesDraw = resQuery[0].numberOfGamesDraw + 1;
+            }
+            await Statistical.findOneAndUpdate({ userName: userName }, update);
+        })
+        .catch(err => console.log(err, ' - handleStatistical - ', 'ShowResultWinOrLost'))
 }
 
 module.exports = {
