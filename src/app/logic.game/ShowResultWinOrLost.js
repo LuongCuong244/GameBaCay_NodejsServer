@@ -1,0 +1,176 @@
+const Room = require("../models/Room");
+const handleEndGame = require('../logic.game/HandleEndGame').handleEndGame;
+const PLAYER_KEYS = require('../../variables').PLAYER_KEYS;
+const timeManagement = require('./TimeManagement/RunningGame_Manager').timeManagement;
+
+const countdownOfRunningGame = async (roomSocket, roomName, _displayAllRooms) => {
+    let countDown = timeManagement.get(roomName).countDown;
+    if (countDown) {
+        timeManagement.set(roomName,{
+            time: 20,
+            countDown: null,
+        })
+        await clearInterval(countDown);
+    }
+    let time = timeManagement.get(roomName).time;
+    timeManagement.get(roomName).countDown = setInterval(() => {
+        if (time <= 0) {
+            // lật hết lá bài
+            Room.find({ roomName: roomName })
+                .then(async (rooms) => {
+                    if (rooms.length !== 1) {
+                        console.log("Tên bàn không là duy nhất");
+                        return;
+                    }
+                    let room = rooms[0];
+                    for (let key of PLAYER_KEYS) {
+                        if (room[key] && room[key].isWaiting === false) {
+                            room[key].flipCardFirst = true;
+                            room[key].flipCardSecond = true;
+                            room[key].flipCardThird = true;
+                            await Room.findOneAndUpdate({ roomName: roomName }, {
+                                [key]: room[key]
+                            })
+                        }
+                    }
+                    showResult(roomSocket, roomName, _displayAllRooms);
+                })
+                .catch(err => console.log(err));
+        } else {
+            timeManagement.set(roomName,{
+                time: time - 1,
+                countDown: timeManagement.get(roomName).countDown
+            })
+            time--;
+        }
+    }, 1000)
+}
+
+let isShowResult = false;
+
+const showResult = async (roomSocket, roomName, _displayAllRooms) => {
+    let countDown = timeManagement.get(roomName).countDown;
+    if (countDown) {
+        timeManagement.set(roomName,{
+            time: 20,
+            countDown: null,
+        })
+        await clearInterval(countDown);
+    }
+    console.log('hiển thị kết quả!');
+    if (isShowResult) {
+        return;
+    }
+    isShowResult = true;
+    setTimeout(() => {
+        isShowResult = false;
+    }, 3000);
+
+    Room.find({ roomName: roomName })
+        .then(async (rooms) => {
+            if (rooms.length !== 1) {
+                console.log("Tên bàn không là duy nhất!");
+                return;
+            }
+            let room = rooms[0];
+            let response = {};
+            for (let key of PLAYER_KEYS) {
+                if (room[key] && key != 'ownerOfRoom' && room[key].isWaiting === false) {
+                    room[key].status = compareScore(room[key], room.ownerOfRoom);
+                    await Room.findOneAndUpdate({ roomName: roomName }, {
+                        [key]: room[key]
+                    })
+                    response[key] = room[key];
+                }
+            }
+            roomSocket.in(roomName).emit('hide_countdown');
+            roomSocket.in(roomName).emit('game_room_update', {
+                ...response,
+                'ownerOfRoom': room.ownerOfRoom
+            });
+            setTimeout(() =>{
+                handleEndGame(roomSocket, roomName, _displayAllRooms);
+            },3000)
+        })
+        .catch(err => console.log(err))
+}
+
+const compareScore = (guest, owner) => {
+
+    let cardGuest_1 = guest.cardFirst;
+    let cardGuest_2 = guest.cardSecond;
+    let cardGuest_3 = guest.cardThird;
+    let cardOwner_1 = owner.cardFirst;
+    let cardOwner_2 = owner.cardSecond;
+    let cardOwner_3 = owner.cardThird;
+
+    let scoreGuest_1 = parseInt(cardGuest_1.charAt(cardGuest_1.length - 1));
+    let scoreGuest_2 = parseInt(cardGuest_2.charAt(cardGuest_2.length - 1));
+    let scoreGuest_3 = parseInt(cardGuest_3.charAt(cardGuest_3.length - 1));
+    let scoreOwner_1 = parseInt(cardOwner_1.charAt(cardOwner_1.length - 1));
+    let scoreOwner_2 = parseInt(cardOwner_2.charAt(cardOwner_2.length - 1));
+    let scoreOwner_3 = parseInt(cardOwner_3.charAt(cardOwner_3.length - 1));
+
+    let scoreGuest = (scoreGuest_1 + scoreGuest_2 + scoreGuest_3) % 10;
+    let scoreOwner = (scoreOwner_1 + scoreOwner_2 + scoreOwner_3) % 10;
+    if (scoreGuest === 0) {
+        scoreGuest = 10;
+    }
+    if (scoreOwner === 0) {
+        scoreOwner = 10;
+    }
+
+    if (scoreGuest > scoreOwner) {
+        return 'Win';
+    }
+    if (scoreGuest < scoreOwner) {
+        return 'Lost';
+    }
+
+    // Thuật toán:
+    /*
+        rô: score*1000 (nếu là 1 thì score*10) -> phổ điểm {2000,3000,4000,5000,6000,7000,8000,9000,10000}
+        cơ: score*100 (nếu là 1 thì score*10) -> phổ điểm {200,300,400,500,600,700,800,900,1000}
+        tép: score*10 (nếu là 1 thì score*10) -> phổ điểm {20,30,40,50,60,70,80,90,100}
+        bích: giữ nguyên (nếu là 1 thì score*10) -> phổ điểm {2,3,4,5,6,7,,9,10}
+    */
+    let object = {
+        'ro': 1000,
+        'co': 100,
+        'tep': 10,
+        'bich': 1
+    }
+    let arr = Object.keys(object);
+    let maxGuest_1, maxGuest_2, maxGuest_3;
+    let maxOwner_1, maxOwner_2, maxOwner_3;
+    for (let item of arr) {
+        if (cardGuest_1.startsWith(item)) {
+            maxGuest_1 = scoreGuest_1 * object[item];
+        }
+        if (cardGuest_2.startsWith(item)) {
+            maxGuest_2 = scoreGuest_2 * object[item];
+        }
+        if (cardGuest_3.startsWith(item)) {
+            maxGuest_3 = scoreGuest_3 * object[item];
+        }
+        if (cardOwner_1.startsWith(item)) {
+            maxOwner_1 = scoreOwner_1 * object[item];
+        }
+        if (cardOwner_2.startsWith(item)) {
+            maxOwner_2 = scoreOwner_2 * object[item];
+        }
+        if (cardOwner_3.startsWith(item)) {
+            maxOwner_3 = scoreOwner_3 * object[item];
+        }
+    }
+    if (Math.max(maxGuest_1, maxGuest_2, maxGuest_3) > Math.max(maxOwner_1, maxOwner_2, maxOwner_3)) {
+        return 'Win';
+    } else {
+        return 'Lost';
+    }
+}
+
+module.exports = {
+    countdownOfRunningGame,
+    showResult,
+}
