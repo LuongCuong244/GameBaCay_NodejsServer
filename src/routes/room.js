@@ -8,5 +8,6 @@ router.post('/join-room',roomController._joinRoom);
 router.get('/get-all-rooms',roomController._getAllRooms);
 router.post('/get-data',roomController._getDataOfPlayerInRoom);
 router.post('/change-bet',roomController._changeBet);
+router.post('/find-room',roomController._findRoom);
 
 module.exports = router;

@@ -5,6 +5,7 @@ const Room = new Schema({
     roomName: {type: String, trim: true, maxlength: 50, required: true, unique: true},
     roomPassword: {type: String, trim: true, maxlength: 50},
     minBet: {type: Number, default: 1000},
+    messages: [Object],
     ownerOfRoom: Object,
     firstPlayer: Object,
     secondPlayer: Object,

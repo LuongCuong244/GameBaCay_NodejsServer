@@ -19,52 +19,56 @@ const handleJoinRoom = async (room, user, data, res) => {
         res.json({ error: 'Vui lòng đợi khi ván đấu kết thúc!' });
         return;
     }
+    if (!room.ownerOfRoom) {
+        res.json({ error: 'Hãy chờ vài giây để xác nhận chủ bàn!' });
+        return;
+    }
 
     let response = {}  // lưu trữ giá trị trả về
     const emptySeats = new Map();
     if (!room.firstPlayer) {
         emptySeats.set(1, 'firstPlayer')
-    }else{
+    } else {
         response['firstPlayer'] = room.firstPlayer
     }
     if (!room.secondPlayer) {
         emptySeats.set(2, 'secondPlayer')
-    }else{
+    } else {
         response['secondPlayer'] = room.secondPlayer
     }
     if (!room.thirdPlayer) {
         emptySeats.set(3, 'thirdPlayer')
-    }else{
+    } else {
         response['thirdPlayer'] = room.thirdPlayer
     }
     if (!room.fourthPlayer) {
         emptySeats.set(4, 'fourthPlayer')
-    }else{
+    } else {
         response['fourthPlayer'] = room.fourthPlayer
     }
     if (!room.fifthPlayer) {
         emptySeats.set(5, 'fifthPlayer')
-    }else{
+    } else {
         response['fifthPlayer'] = room.fifthPlayer
     }
     if (!room.sixthPlayer) {
         emptySeats.set(6, 'sixthPlayer')
-    }else{
+    } else {
         response['sixthPlayer'] = room.sixthPlayer
     }
     if (!room.seventhPlayer) {
         emptySeats.set(7, 'seventhPlayer')
-    }else{
+    } else {
         response['seventhPlayer'] = room.seventhPlayer
     }
     if (!room.eighthPlayer) {
         emptySeats.set(8, 'eighthPlayer')
-    }else{
+    } else {
         response['eighthPlayer'] = room.eighthPlayer
     }
     if (!room.ninthPlayer) {
         emptySeats.set(9, 'ninthPlayer')
-    }else{
+    } else {
         response['ninthPlayer'] = room.ninthPlayer
     }
     response['ownerOfRoom'] = room.ownerOfRoom

@@ -1,6 +1,7 @@
 const Room = require('../models/Room');
 const PLAYER_KEYS = require('../../variables').PLAYER_KEYS
 const timeManagement = require('./TimeManagement/Ready_Manager').timeManagement;
+const displayAllRooms = require('../socketIO/modules/DisplayAllRooms');
 
 const cancelCountdown = async (roomSocket, roomName) => {
     let countDown = timeManagement.get(roomName).countDown;
@@ -74,6 +75,7 @@ const newGame = async (roomSocket, roomName) => {  // được gọi khi tất
             }
             roomSocket.in(roomName).emit('hide_ready_button');
             roomSocket.in(roomName).emit('appear_total_bet', totalBet);
+            displayAllRooms(roomSocket);
         })
         .catch(err => console.log(err))
 }

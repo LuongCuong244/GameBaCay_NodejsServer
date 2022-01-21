@@ -6,10 +6,11 @@ const RoomManager_RunningGame = require('../logic.game/TimeManagement/RunningGam
 const RoomManager_Ready = require('../logic.game/TimeManagement/Ready_Manager');
 const StartGameManager = require('./Manager/StartGameManager');
 const findANewOwner = require('./Module/FindANewOwner');
+const displayAllRooms = require('../socketIO/modules/DisplayAllRooms');
 
 const PLAYER_KEYS = require('../../variables').PLAYER_KEYS;
 
-const handelLeaveRoom = (roomSocket, roomName, userName, _displayAllRooms) => {
+const handelLeaveRoom = (roomSocket, roomName, userName) => {
 
     RoomModel.find({ roomName: roomName })
         .then(async (rooms) => {
@@ -118,7 +119,7 @@ const handelLeaveRoom = (roomSocket, roomName, userName, _displayAllRooms) => {
                     }
                 }
             }
-            _displayAllRooms(roomSocket);
+            displayAllRooms(roomSocket);
         })
         .catch(err => console.log(err))
 }

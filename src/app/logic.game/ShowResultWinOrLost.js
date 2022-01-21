@@ -3,7 +3,7 @@ const handleEndGame = require('../logic.game/HandleEndGame').handleEndGame;
 const PLAYER_KEYS = require('../../variables').PLAYER_KEYS;
 const timeManagement = require('./TimeManagement/RunningGame_Manager').timeManagement;
 
-const countdownOfRunningGame = async (roomSocket, roomName, _displayAllRooms) => {
+const countdownOfRunningGame = async (roomSocket, roomName) => {
     let countDown = timeManagement.get(roomName).countDown;
     if (countDown) {
         timeManagement.set(roomName,{
@@ -33,7 +33,7 @@ const countdownOfRunningGame = async (roomSocket, roomName, _displayAllRooms) =>
                             })
                         }
                     }
-                    showResult(roomSocket, roomName, _displayAllRooms);
+                    showResult(roomSocket, roomName);
                 })
                 .catch(err => console.log(err));
         } else {
@@ -48,7 +48,7 @@ const countdownOfRunningGame = async (roomSocket, roomName, _displayAllRooms) =>
 
 let isShowResult = false;
 
-const showResult = async (roomSocket, roomName, _displayAllRooms) => {
+const showResult = async (roomSocket, roomName) => {
     let countDown = timeManagement.get(roomName).countDown;
     if (countDown) {
         timeManagement.set(roomName,{
@@ -89,7 +89,7 @@ const showResult = async (roomSocket, roomName, _displayAllRooms) => {
                 'ownerOfRoom': room.ownerOfRoom
             });
             setTimeout(() =>{
-                handleEndGame(roomSocket, roomName, _displayAllRooms);
+                handleEndGame(roomSocket, roomName);
             },3000)
         })
         .catch(err => console.log(err))

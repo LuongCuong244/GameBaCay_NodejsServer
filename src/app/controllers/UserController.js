@@ -11,6 +11,7 @@ class UserController {
                 if (user.length === 1) {
                     res.json({
                         information: {
+                            userName: req.body.userName,
                             coin: user[0].coin,
                             avatar: user[0].avatar,
                         }

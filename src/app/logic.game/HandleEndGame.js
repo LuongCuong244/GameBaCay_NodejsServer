@@ -6,8 +6,9 @@ const RoomManager_RunningGame = require('../logic.game/TimeManagement/RunningGam
 const StartGameManager = require('./Manager/StartGameManager');
 const PLAYER_KEYS = require('../../variables').PLAYER_KEYS;
 const findANewOwner = require('./Module/FindANewOwner');
+const displayAllRooms = require('../socketIO/modules/DisplayAllRooms');
 
-const handleEndGame = (roomSocket, roomName, _displayAllRooms) => { 
+const handleEndGame = (roomSocket, roomName) => { 
 
     console.log("đang xử lý endgame");
 
@@ -48,7 +49,7 @@ const handleEndGame = (roomSocket, roomName, _displayAllRooms) => {
                 StartGameManager.deleteItem(roomName);
 
                 try {
-                    _displayAllRooms(roomSocket);
+                    displayAllRooms(roomSocket);
                 } catch (error) {
                     console.log(error,'-handleEndGame-');
                 }
@@ -73,7 +74,7 @@ const handleEndGame = (roomSocket, roomName, _displayAllRooms) => {
                 findANewOwner(roomSocket,room);
             }
             try {
-                _displayAllRooms(roomSocket);
+                displayAllRooms(roomSocket);
             } catch (error) {
                 console.log(error,'-handleEndGame-');
             }

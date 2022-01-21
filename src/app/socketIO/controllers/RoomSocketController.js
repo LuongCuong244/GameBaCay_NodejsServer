@@ -1,5 +1,6 @@
 const RoomModel = require('../../models/Room');
 const UserModle = require('../../models/User');
+const WorldChatModel = require('../../models/WorldChat');
 const moduleNewGame = require('../../logic.game/NewGame');
 const startGame = require('../../logic.game/StartGame');
 const PLAYER_KEYS = require('../../../variables').PLAYER_KEYS;
@@ -11,25 +12,13 @@ const RoomManager_RunningGame = require('../../logic.game/TimeManagement/Running
 const RoomManager_Ready = require('../../logic.game/TimeManagement/Ready_Manager');
 const StartGameManager = require('../../logic.game/Manager/StartGameManager');
 const FindOwnerCountdown = require('../../logic.game/TimeManagement/FindOwnerCountdown');
+const displayAllRooms = require('../modules/DisplayAllRooms');
+const findANewOwner = require('../../logic.game/Module/FindANewOwner');
 
 class RoomSocketController {
 
     _displayAllRooms(roomSocket) {
-        RoomModel.find({})
-            .then((rooms) => {
-                let newArray = rooms.map(item => {
-                    return {
-                        roomName: item.roomName,
-                        havePassword: item.roomPassword != '' ? 'Yes' : 'No',
-                        playersInRoom: item.playersInRoom,
-                        viewersInRoom: item.viewersInRoom,
-                        ownerOfRoom: item.ownerOfRoom,
-                    }
-                })
-                roomSocket.emit('send_AllRooms', {
-                    allRooms: newArray,
-                })
-            })
+        displayAllRooms(roomSocket);
     }
 
     _reloadRoom(roomSocket, socket, roomName, data) {
@@ -48,7 +37,7 @@ class RoomSocketController {
 
     _leaveRoom(roomSocket, socket, roomName, userName) {
         socket.leave(roomName);
-        handelLeaveRoom(roomSocket, roomName, userName, this._displayAllRooms);
+        handelLeaveRoom(roomSocket, roomName, userName);
     }
 
     _ready(roomSocket, roomName, userName) {
@@ -77,6 +66,7 @@ class RoomSocketController {
                         }
                     }
                 })
+                roomSocket.in(roomName).emit('game_room_update', room);
                 if (count === room.playersInRoom.length) {
                     moduleNewGame.newGame(roomSocket, roomName);
                 }
@@ -89,7 +79,7 @@ class RoomSocketController {
     }
 
     _startGame(roomSocket, roomName) { // được gọi khi kết thúc hiển thị thanh tổng cược.
-        startGame(roomSocket, roomName, this._displayAllRooms);
+        startGame(roomSocket, roomName);
     }
 
     _flipCard(roomSocket, roomName, oderOfCard, position) {
@@ -149,7 +139,7 @@ class RoomSocketController {
                         }
                     }
                     roomSocket.in(roomName).emit('hide_countdown');
-                    showResult(roomSocket, roomName, this._displayAllRooms);
+                    showResult(roomSocket, roomName);
                 }
             })
             .catch(err => console.log(err));
@@ -180,7 +170,7 @@ class RoomSocketController {
                     roomSocket.in(roomName).emit('set_position', room.ownerOfRoom.userName, 10);
                     roomSocket.in(roomName).emit('update_entire_room', room);
                     roomSocket.in(roomName).emit('hide_confirm_owner_room', room.ownerOfRoom.userName);
-                    this._displayAllRooms(roomSocket);
+                    displayAllRooms(roomSocket);
 
                     console.log("Chủ bàn mới!");
                     if (room.playersInRoom.length > 1) {
@@ -192,6 +182,7 @@ class RoomSocketController {
                     console.log("Vị trí không phù hợp -RoomSocketController-");
                 }
             })
+            .catch(err => console.log(err, '_setOwnerRoom', ' - RoomSocketController'))
     }
 
     _updateChangeBet(roomSocket, roomName) {
@@ -203,6 +194,128 @@ class RoomSocketController {
                 }
                 roomSocket.in(roomName).emit('game_room_update', rooms[0]);
             })
+            .catch(err => console.log(err, '_updateChangeBet', ' - RoomSocketController'))
+    }
+
+    _getMessagesWorldChat(socket) {
+        WorldChatModel.find({})
+            .then(async (resQuery) => {
+                if (resQuery.length < 1) {
+                    let createWC = {
+                        name: 'WorldChat',
+                        messages: [],
+                    }
+                    await WorldChatModel.create(createWC, (err) => {
+                        if(err){
+                            console.log("Lỗi khi khởi tạo WC: ", err);
+                        }
+                    })
+                    console.log("Không có tin nhắn nào! -RoomSocketController.js");
+                    return;
+                }
+                let allMessages = resQuery[0].messages;
+                if (allMessages.length > 100) {
+                    let size = allMessages.length;
+                    allMessages.splice(size - 100, 100);  // chỉ lấy 100 tin nhắn.
+                    await WorldChatModel.findOneAndUpdate({ name: 'WorldChat' }, {
+                        messages: allMessages,
+                    })
+                }
+                socket.emit('update_messages_in_world_chat', allMessages);
+                socket.emit('set_message', allMessages[allMessages.length - 1]);
+            })
+            .catch(err => console.log(err, '_getMessagesWorldChat', ' - RoomSocketController'))
+    }
+
+    _sendingMessageToWorldChat(roomSocket, message) {
+        WorldChatModel.find({})
+            .then(async (resQuery) => {
+                if (resQuery.length < 1) {
+                    let createWC = {
+                        name: 'WorldChat',
+                        messages: [],
+                    }
+                    await WorldChatModel.create(createWC, (err) => {
+                        console.log("Lỗi khi khởi tạo WC: ", err);
+                    })
+                    console.log("Không có tin nhắn nào! -RoomSocketController.js");
+                    return;
+                }
+                let allMessages = resQuery[0].messages;
+                allMessages.push(message);
+                await WorldChatModel.findOneAndUpdate({ name: "WorldChat" }, {
+                    messages: allMessages,
+                })
+                roomSocket.emit('update_messages_in_world_chat', allMessages);
+                roomSocket.emit('update_unseen_messages_number_world_chat', allMessages[allMessages.length - 1]);
+            })
+            .catch(err => console.log(err, '_sendingMessageToWorldChat', ' - RoomSocketController'))
+    }
+
+    _getMessages(socket, roomName) {
+        RoomModel.find({ roomName: roomName })
+            .then(async (resQuery) => {
+                if (resQuery.length < 1) {
+                    let createChatRoom = {
+                        messages: [],
+                    }
+                    await RoomModel.create(createChatRoom, (err) => {
+                        if(err){
+                            console.log("Lỗi khi khởi tạo chat room: ", err);
+                        }
+                    })
+                    console.log("Không có tin nhắn nào! -RoomSocketController.js");
+                    return;
+                }
+                let allMessages = resQuery[0].messages;
+                if (allMessages.length > 100) {
+                    let size = allMessages.length;
+                    allMessages.splice(size - 100, 100);  // chỉ lấy 100 tin nhắn.
+                    await RoomModel.findOneAndUpdate({ roomName: roomName }, {
+                        messages: allMessages,
+                    })
+                }
+                socket.emit('update_messages', allMessages);
+            })
+            .catch(err => console.log(err, '_getMessages', ' - RoomSocketController'))
+    }
+
+    _sendingMessageToRoom(roomSocket, message, roomName) {
+        RoomModel.find({ roomName: roomName })
+            .then(async (resQuery) => {
+                if (resQuery.length < 1) {
+                    let createWC = {
+                        name: 'WorldChat',
+                        messages: [],
+                    }
+                    await RoomModel.create(createWC, (err) => {
+                        console.log("Lỗi khi khởi tạo chat room: ", err);
+                    })
+                    console.log("Không có tin nhắn nào! -RoomSocketController.js");
+                    return;
+                }
+                let allMessages = resQuery[0].messages;
+                allMessages.push(message);
+                await RoomModel.findOneAndUpdate({ roomName: roomName }, {
+                    messages: allMessages,
+                })
+                roomSocket.in(roomName).emit('update_messages', allMessages);
+                roomSocket.in(roomName).emit('update_unseen_messages_number', allMessages[allMessages.length - 1]);
+            })
+            .catch(err => console.log(err, '_sendingMessageToRoom', ' - RoomSocketController'))
+    }
+
+    _updateCoin(socket, userName) {
+        UserModle.find({ userName: userName })
+            .then((users) => {
+                if (users.length !== 1) {
+                    console.log("Người dùng không tồn tại! - RoomSocketController.js");
+                    return;
+                }
+                socket.emit('res_update_coin', users[0].coin);
+                socket.emit('update_coin_home', users[0].coin);
+            })
+            .catch(err => console.log(err, '_updateCoin', ' - RoomSocketController'))
     }
 
     async _updateState(roomSocket, socket, userName) {
@@ -267,8 +380,13 @@ class RoomSocketController {
                                             playersInRoom: room.playersInRoom,
                                         });
                                         if (room.ownerOfRoom) {
-                                            roomSocket.in(roomName).emit('start_countdown_ofNewGame'); // restart ở client
-                                            moduleNewGame.countdownOfNewGame(roomSocket, roomName); // restart ở server
+                                            if (room.playersInRoom.length === 1) {
+                                                roomSocket.in(roomName).emit('hide_ready_button'); // hủy đếm ngược ở client.
+                                                moduleNewGame.cancelCountdown(roomSocket, roomName); // hủy đếm ngược ở server.
+                                            } else {
+                                                roomSocket.in(roomName).emit('start_countdown_ofNewGame'); // restart ở client
+                                                moduleNewGame.countdownOfNewGame(roomSocket, roomName); // restart ở server
+                                            }
                                         } else {
                                             moduleNewGame.cancelCountdown(roomSocket, roomName);
                                             console.log("Mất chủ bàn!");
@@ -279,7 +397,7 @@ class RoomSocketController {
                                     }
                                 })
                             }
-                            this._displayAllRooms(roomSocket);
+                            displayAllRooms(roomSocket);
                             return;
                         }
                     }

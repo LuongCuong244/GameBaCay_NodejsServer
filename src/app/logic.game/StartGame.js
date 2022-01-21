@@ -102,7 +102,7 @@ const updateCoin = async (roomSocket, room) => {
     roomSocket.in(room.roomName).emit('update_coin', room);
 }
 
-const startGame = (roomSocket, roomName, _displayAllRooms) => {
+const startGame = (roomSocket, roomName) => {
     if (StartGameManager.getItem(roomName) === false) {  // người gửi request đầu tiên sẽ kích hoạt chia bài
         StartGameManager.updateItem(roomName, true);
         setTimeout(() => {
@@ -120,7 +120,7 @@ const startGame = (roomSocket, roomName, _displayAllRooms) => {
                 await updateCoin(roomSocket, room);
                 await distributeCards(room, roomName);
 
-                countdownOfRunningGame(roomSocket, roomName, _displayAllRooms); // bắt đầu đếm ngược ở server;
+                countdownOfRunningGame(roomSocket, roomName); // bắt đầu đếm ngược ở server;
 
                 roomSocket.in(roomName).emit('start_running_game');
                 roomSocket.in(roomName).emit('game_room_update', room); // load lại phòng
